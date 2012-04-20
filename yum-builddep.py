@@ -162,7 +162,7 @@ class YumBuildDep(YumUtilBase):
                     print "Could not setup repo %s: %s" % (r.id, e)
                     sys.exit(1)
 
-    def install_deps(self, deplist ):
+    def install_deps(self, deplist, tolerant=False):
 
         for dep in deplist:
             self.logger.debug(' REQ:  %s' % dep)                
@@ -180,8 +180,12 @@ class YumBuildDep(YumUtilBase):
                 self.install(pkg)
                 
             except yum.Errors.YumBaseError, e:
-                self.logger.error("Error: %s " % e)
-		exit(1)
+		if not tolerant:
+                   self.logger.error("Error: %s (tolerant? %s)" % (e,tolerant))
+		   exit(1)
+		else:
+                   self.logger.info("Couldn't find %s, continuing " % e)
+		   continue
     
 
     # go through each of the pkgs, figure out what they are/where they are 
@@ -249,7 +253,7 @@ class YumBuildDep(YumUtilBase):
 
         for srpm in toActOn:
             self.logger.info('Getting requirements for %s' % srpm)
-            self.install_deps(srpm.requiresList())
+            self.install_deps(srpm.requiresList(), opts.tolerant)
     
         for name in specnames:
             # (re)load rpm config for target if set
@@ -271,7 +275,7 @@ class YumBuildDep(YumUtilBase):
                 buildreqs.append(d.DNEVR()[2:])
                 
             self.logger.info('Getting requirements for %s' % name)
-            self.install_deps(buildreqs)
+            self.install_deps(buildreqs, opts.tolerant)
             
 if __name__ == '__main__':
     setup_locale()
