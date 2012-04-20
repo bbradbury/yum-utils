@@ -66,6 +66,7 @@ class YumBuildDep(YumUtilBase):
         if hasattr(rpm, 'reloadConfig'):
             self.optparser.add_option("--target",
                               help="set target architecture for spec parsing")
+        self.optparser.add_option("--build_order_out", help="Filename to output build order of sources on command line")
         self.main()
 
     def main(self):
@@ -118,6 +119,16 @@ class YumBuildDep(YumUtilBase):
             sys.exit()
             
         sys.exit(self.doUtilTransaction())
+
+    def setupFakeRepoFromCommandLine(self, cmdlinepkglist=[]):
+        self.logger.debug(' Cmdline package list:  %s' % cmdlinepkglist)
+	localrepo = self.add_enable_repo('_cmdline-source')
+	for pkg in cmdlinepkglist:
+	    self.logger.debug('adding pkg %s to _cmdline repo', pkg)
+            localrepo.getPackageSack().addPackage(pkg)
+        localrepo.getPackageSack().buildIndexes()
+        #self._getSacks(['src'],'_cmdline-source')
+
         
     def setupSourceRepos(self):
         # enable the -source repos for enabled primary repos
@@ -151,7 +162,8 @@ class YumBuildDep(YumUtilBase):
                     print "Could not setup repo %s: %s" % (r.id, e)
                     sys.exit(1)
 
-    def install_deps(self, deplist):
+    def install_deps(self, deplist ):
+
         for dep in deplist:
             self.logger.debug(' REQ:  %s' % dep)                
             if dep.startswith("rpmlib("): 
@@ -160,14 +172,17 @@ class YumBuildDep(YumUtilBase):
             if instreq:
                 self.logger.info(' --> Already installed : %s'  % instreq[0])                    
                 continue
+
+ 
             try:
                 pkg = self.returnPackageByDep(dep)
                 self.logger.info(' --> %s' % pkg)
                 self.install(pkg)
                 
             except yum.Errors.YumBaseError, e:
-                self.logger.error("Error: %s" % e)
-                sys.exit(1)
+                self.logger.error("Error: %s " % e)
+		exit(1)
+    
 
     # go through each of the pkgs, figure out what they are/where they are 
     # if they are not a local package then run
@@ -187,6 +202,9 @@ class YumBuildDep(YumUtilBase):
         # See if we can use spec files for buildrequires
         if hasattr(rpm, 'spec') and hasattr(rpm.spec, 'sourceHeader'):
             specworks = True
+	else:
+	    self.logger.error("Spec not enabled.")
+
         # See if we can reload rpm configuration
         if hasattr(rpm, 'reloadConfig'):
             reloadworks = True
@@ -223,9 +241,11 @@ class YumBuildDep(YumUtilBase):
                     
         toActOn = []
         for newpkg in srpms:
+            self.logger.debug('convert pkg2srcpkgs: %s %s' % (opts, newpkg))
             toActOn.extend(_best_convert_pkg2srcpkgs(self, opts, newpkg))
-        # Get the best matching srpm
-        toActOn = self.bestPackagesFromList(toActOn, 'src')
+	    self.logger.debug('result: %s' % toActOn)
+	
+	self.setupFakeRepoFromCommandLine(toActOn)
 
         for srpm in toActOn:
             self.logger.info('Getting requirements for %s' % srpm)
